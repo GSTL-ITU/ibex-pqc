@@ -6,3 +6,11 @@
 	path = ibex-demo-system
 	url = https://github.com/lowRISC/ibex-demo-system.git
 	branch = main
+[submodule "kyber"]
+	path = kyber
+	url = https://github.com/pq-crystals/kyber.git
+	branch = main
+[submodule "dilithium"]
+	path = dilithium
+	url = https://github.com/pq-crystals/dilithium.git
+	branch = master

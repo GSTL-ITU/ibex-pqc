@@ -30,6 +30,21 @@ EXPECT     ?=
 SYSTEMS    ?= $(ALL_SYSTEMS)
 # Set to the toolchain install dir (containing bin/) if it is not on PATH
 TOOLCHAIN_DIR ?=
+# Stack size in bytes (e.g. 0x8000). Empty: the system linker script's size
+# (simple: 32 KiB, demo: 4 KiB). Otherwise build/.../link.ld is generated with
+# the stack at the top of RAM and the rest for code and data.
+STACK_SIZE ?=
+# Instruction trace (trace_core_00000000.log). 0 skips it: long tests run ~3x
+# faster and don't write GBs of trace. Cycle counts are the same either way.
+TRACE      ?= 1
+# Build directory suffix: build/SYSTEM/NAME-VARIANT. A test.mk sets it from its
+# configuration (e.g. VARIANT := k$(KYBER_K)) so each setting has its own build.
+VARIANT    ?=
+
+# For test.mk only: extra sources (absolute paths), include dirs and flags
+EXTRA_SRCS  :=
+EXTRA_INCS  :=
+TEST_CFLAGS :=
 
 # The variable used to be lowercase
 ifneq ($(name),)
@@ -47,6 +62,7 @@ endif
 # SYS_SW       software support dir (headers, runtime sources)
 # SYS_SRCS     runtime sources compiled into every test
 # SYS_LD       linker script
+# SYS_MEM_*    RAM base and size, for the generated linker script (STACK_SIZE)
 # SYS_DEFS     defines for tests and runtime
 # SYS_LOG      file the program output (SIM_CTRL) is written to
 # SYS_SIM_DIR  FuseSoC build root, SYS_SIM_WORK/SYS_SIM_BIN inside it
@@ -56,6 +72,8 @@ SYS_CORE := lowrisc:ibex:ibex_simple_system
 SYS_SW   := $(SYS_ROOT)/examples/sw/simple_system/common
 SYS_SRCS := $(SYS_SW)/simple_system_common.c $(SYS_SW)/crt0.S
 SYS_LD   := $(SYS_SW)/link.ld
+SYS_MEM_BASE := 0x100000
+SYS_MEM_SIZE := 0x100000
 SYS_DEFS := -DTEST_SYSTEM_SIMPLE
 SYS_LOG  := ibex_simple_system.log
 SYS_FUSESOC_OPTS = $$(util/ibex_config.py $(CONFIG) fusesoc_opts)
@@ -73,6 +91,8 @@ SYS_CORE := lowrisc:ibex:demo_system
 SYS_SW   := $(SYS_ROOT)/sw/c/common
 SYS_SRCS := $(addprefix $(SYS_SW)/,demo_system.c uart.c timer.c gpio.c pwm.c spi.c crt0.S)
 SYS_LD   := $(SYS_ROOT)/sw/common/link.ld
+SYS_MEM_BASE := 0x100000
+SYS_MEM_SIZE := 0x20000
 SYS_DEFS := -DTEST_SYSTEM_DEMO -DSIM_CTRL_OUTPUT
 SYS_LOG  := ibex_demo_system.log
 SYS_FUSESOC_OPTS =
@@ -105,24 +125,33 @@ SIZE    := $(CROSS_COMPILE)size
 
 CFLAGS := -march=$(ARCH) -mabi=$(ABI) -static -mcmodel=medany -Wall -g $(OPT) \
 	-fvisibility=hidden -nostdlib -nostartfiles -ffreestanding \
-	-I$(SYS_SW) -I$(LIB_DIR) $(SYS_DEFS) $(CFLAGS_EXTRA)
-LIBS := -lgcc -Wl,--no-warn-rwx-segments
+	-I$(SYS_SW) -I$(LIB_DIR) $(addprefix -I,$(EXTRA_INCS)) $(SYS_DEFS) \
+	$(TEST_CFLAGS) $(CFLAGS_EXTRA)
+# --wrap=main: crt0 calls lib/test_main.c, which turns main's return value
+# into TEST PASSED / TEST FAILED
+LIBS := -lgcc -Wl,--no-warn-rwx-segments -Wl,--wrap=main
 
 # ------------------------------------------------------------------ tests ---
 TESTS := $(sort $(filter-out lib build,$(notdir $(patsubst %/,%,$(wildcard $(TESTS_DIR)/*/)))))
 
 TEST_DIR := $(TESTS_DIR)/$(NAME)
-OUT      := $(BUILD_DIR)/$(SYSTEM)/$(NAME)
-REL_OUT  := build/$(SYSTEM)/$(NAME)
+OUT_NAME := $(NAME)$(if $(VARIANT),-$(VARIANT))
+OUT      := $(BUILD_DIR)/$(SYSTEM)/$(OUT_NAME)
+REL_OUT  := build/$(SYSTEM)/$(OUT_NAME)
 OBJ_DIR  := $(OUT)/obj
 ELF      := $(OUT)/$(NAME).elf
+LD_SCRIPT := $(if $(STACK_SIZE),$(OUT)/link.ld,$(SYS_LD))
 
-SRCS := $(wildcard $(TEST_DIR)/*.c $(TEST_DIR)/*.S $(LIB_DIR)/*.c $(LIB_DIR)/*.S) $(SYS_SRCS)
+# A file in the test folder replaces a lib/extra/runtime file of the same name.
+# Objects are named after their source file, so other names must be unique.
+TEST_SRCS  := $(wildcard $(TEST_DIR)/*.c $(TEST_DIR)/*.S)
+OTHER_SRCS := $(wildcard $(LIB_DIR)/*.c $(LIB_DIR)/*.S) $(EXTRA_SRCS) $(SYS_SRCS)
+OTHER_SRCS := $(foreach f,$(OTHER_SRCS),$(if $(filter $(notdir $(f)),$(notdir $(TEST_SRCS))),,$(f)))
+SRCS := $(TEST_SRCS) $(OTHER_SRCS)
 OBJS := $(addprefix $(OBJ_DIR)/,$(addsuffix .o,$(notdir $(basename $(SRCS)))))
-
-# Test folder first so a test can shadow a runtime file of the same name
-vpath %.c $(TEST_DIR) $(LIB_DIR) $(SYS_SW)
-vpath %.S $(TEST_DIR) $(LIB_DIR) $(SYS_SW)
+ifneq ($(words $(OBJS)),$(words $(sort $(OBJS))))
+$(error Source files with the same name: $(sort $(foreach f,$(SRCS),$(if $(filter-out 1,$(words $(filter %/$(notdir $(f)),$(SRCS)))),$(f)))))
+endif
 
 .PHONY: help test build run wave dis sim list regress new clean clean-sim \
 	check-name check-tools
@@ -142,7 +171,7 @@ help:
 	@echo "  make clean-sim         remove the simulator for SYSTEM (and CONFIG)"
 	@echo ""
 	@echo "Variables: SYSTEM=$(SYSTEM) ($(ALL_SYSTEMS)) CONFIG=$(CONFIG) (simple only)"
-	@echo "           ARCH=$(ARCH) OPT=$(OPT) MAX_CYCLES=$(MAX_CYCLES)"
+	@echo "           ARCH=$(ARCH) OPT=$(OPT) MAX_CYCLES=$(MAX_CYCLES) STACK_SIZE=$(STACK_SIZE)"
 	@echo "           CC=$(CC) TOOLCHAIN_DIR=$(TOOLCHAIN_DIR) CFLAGS_EXTRA=$(CFLAGS_EXTRA)"
 
 check-name:
@@ -167,9 +196,11 @@ list:
 	  printf '%-20s %s\n' $$t "$$s"; \
 	done
 
-.PHONY: print-systems
+.PHONY: print-systems print-out
 print-systems:
 	@echo $(SYSTEMS)
+print-out:
+	@echo $(OUT)
 
 # ------------------------------------------------------------------- sim ----
 sim: $(SYS_SIM_BIN)
@@ -196,28 +227,41 @@ clean-sim:
 # ----------------------------------------------------------------- build ----
 build: check-name check-tools $(ELF) $(OUT)/$(NAME).dis
 
-$(ELF): $(OBJS) $(SYS_LD)
-	$(CC) $(CFLAGS) -T $(SYS_LD) $(OBJS) -o $@ $(LIBS)
+$(ELF): $(OBJS) $(LD_SCRIPT)
+	$(CC) $(CFLAGS) -T $(LD_SCRIPT) $(OBJS) -o $@ $(LIBS)
 	@$(SIZE) $@
+
+# The system linker script with the ram/stack lines of MEMORY rewritten:
+# stack = top STACK_SIZE bytes of RAM, ram = everything below it
+$(OUT)/link.ld: $(SYS_LD) $(OUT)/.flags
+	@ram=$$(( $(SYS_MEM_SIZE) - $(STACK_SIZE) )); \
+	stack=$$(( $(SYS_MEM_BASE) + ram )); \
+	sed -E \
+	  -e "s/^([[:space:]]*ram[[:space:]]*:).*/\1 ORIGIN = $(SYS_MEM_BASE), LENGTH = $$(printf 0x%X $$ram)/" \
+	  -e "s/^([[:space:]]*stack[[:space:]]*:).*/\1 ORIGIN = $$(printf 0x%X $$stack), LENGTH = $(STACK_SIZE)/" \
+	  $< > $@
+	@grep -q "LENGTH = $(STACK_SIZE)$$" $@ || { echo "Error: could not set the stack size in $@"; exit 1; }
 
 dis: check-name check-tools $(OUT)/$(NAME).dis
 
 $(OUT)/$(NAME).dis: $(ELF)
 	$(OBJDUMP) -fhSD $< > $@
 
-$(OBJ_DIR)/%.o: %.c | $(OBJ_DIR)
-	$(CC) $(CFLAGS) -MMD -c -o $@ $<
-
-$(OBJ_DIR)/%.o: %.S | $(OBJ_DIR)
-	$(CC) $(CFLAGS) -MMD -c -o $@ $<
+# One rule per object, with its exact source file
+define obj_rule
+$(OBJ_DIR)/$(notdir $(basename $(1))).o: $(1) | $(OBJ_DIR)
+	$$(CC) $$(CFLAGS) -MMD -c -o $$@ $$<
+endef
+$(foreach s,$(SRCS),$(eval $(call obj_rule,$(s))))
 
 $(OBJ_DIR):
 	@mkdir -p $@
 
-# Rebuild when flags change (e.g. a different ARCH or OPT)
+# Rebuild when flags change (e.g. a different ARCH, OPT or STACK_SIZE)
+BUILD_SIG = $(CC) $(CFLAGS) stack=$(STACK_SIZE)
 $(OBJS): $(OUT)/.flags
 $(OUT)/.flags: FORCE | $(OBJ_DIR)
-	@echo '$(CC) $(CFLAGS)' | cmp -s - $@ || echo '$(CC) $(CFLAGS)' > $@
+	@echo '$(BUILD_SIG)' | cmp -s - $@ || echo '$(BUILD_SIG)' > $@
 FORCE:
 
 -include $(OBJS:.o=.d)
@@ -228,10 +272,11 @@ FORCE:
 #   otherwise              -> "TEST PASSED" present and "TEST FAILED" absent
 # On the demo system, UART output goes to uart0.log and is shown as well.
 # The result line is also written to build/SYSTEM/X/result.txt for regress.
-SIM_ARGS = --meminit=ram,$(NAME).elf --term-after-cycles=$(MAX_CYCLES)
+SIM_ARGS = --meminit=ram,$(NAME).elf --term-after-cycles=$(MAX_CYCLES) \
+	$(if $(filter 0,$(TRACE)),+ibex_tracer_enable=0)
 
 define run_sim
-	@cd $(OUT) && rm -f $(SYS_LOG) uart0.log result.txt expect.diff && \
+	@cd $(OUT) && rm -f $(SYS_LOG) uart0.log result.txt expect.diff trace_core_*.log && \
 	echo "=== Running $(NAME) on $(SYSTEM) ($(SYS_DESC), MAX_CYCLES=$(MAX_CYCLES))" && \
 	$(SYS_SIM_BIN) $(SIM_ARGS) $(1) > sim_stdout.log 2>&1 < /dev/null; \
 	rc=$$?; \
@@ -283,9 +328,10 @@ regress:
 	    esac; \
 	    total=$$((total+1)); \
 	    log=$(BUILD_DIR)/$$s/regress_$$t.log; mkdir -p $(BUILD_DIR)/$$s; \
-	    rm -f $(BUILD_DIR)/$$s/$$t/result.txt; \
+	    res=$$($(MAKE) --no-print-directory -s NAME=$$t SYSTEM=$$s print-out)/result.txt; \
+	    rm -f $$res; \
 	    if $(MAKE) --no-print-directory test NAME=$$t SYSTEM=$$s > $$log 2>&1; then pass=$$((pass+1)); fi; \
-	    if [ -f $(BUILD_DIR)/$$s/$$t/result.txt ]; then cat $(BUILD_DIR)/$$s/$$t/result.txt >> $$summary; \
+	    if [ -f $$res ]; then cat $$res >> $$summary; \
 	    else echo "$$t $$s FAIL (build error, see build/$$s/regress_$$t.log)" >> $$summary; fi; \
 	  done; \
 	done; \
@@ -307,17 +353,16 @@ endif
 	  'int main(void) {' \
 	  '  puts("$(NAME)\n");' \
 	  '' \
-	  '  CHECK(1 + 1 == 2);' \
+	  '  CHECK(1 + 1 == 2);  // stops with TEST FAILED if false' \
 	  '' \
-	  '  test_pass();' \
-	  '  return 0;' \
+	  '  return 0;  // 0 = PASS, anything else = FAIL' \
 	  '}' > $(TEST_DIR)/$(NAME).c
 	@echo "Created tests/$(NAME)/$(NAME).c, run: make test NAME=$(NAME) [SYSTEM=demo]"
 
 # ----------------------------------------------------------------- clean ----
 clean:
 ifneq ($(NAME),)
-	rm -rf $(addsuffix /$(NAME),$(addprefix $(BUILD_DIR)/,$(ALL_SYSTEMS)))
+	rm -rf $(foreach s,$(ALL_SYSTEMS),$(BUILD_DIR)/$(s)/$(NAME) $(wildcard $(BUILD_DIR)/$(s)/$(NAME)-*))
 else
 	rm -rf $(addprefix $(BUILD_DIR)/,$(ALL_SYSTEMS)) $(BUILD_DIR)/regress.txt
 endif
