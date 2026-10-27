@@ -250,7 +250,7 @@ $(OUT)/$(NAME).dis: $(ELF)
 # One rule per object, with its exact source file
 define obj_rule
 $(OBJ_DIR)/$(notdir $(basename $(1))).o: $(1) | $(OBJ_DIR)
-	$$(CC) $$(CFLAGS) -MMD -c -o $$@ $$<
+	$$(CC) $$(CFLAGS) -MMD -MP -c -o $$@ $$<
 endef
 $(foreach s,$(SRCS),$(eval $(call obj_rule,$(s))))
 

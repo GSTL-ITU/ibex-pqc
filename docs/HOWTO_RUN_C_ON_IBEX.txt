@@ -5,7 +5,7 @@ For the automated flow, see tests/README.md.
 How to compile and run a C program on Ibex (Verilator, Simple System)
 =====================================================================
 
-All commands are run from the Ibex repository root (/home/baris/gstl/ibex).
+All commands are run from the Ibex repository root (/home/baris/gstl/ibex-pqc/ibex).
 Source of truth: examples/simple_system/README.md
 
 
