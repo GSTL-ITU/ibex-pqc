@@ -1,0 +1,147 @@
+CAPI=2:
+# FPGA version of the Ibex Simple System for the Nexys 4 DDR (Nexys A7-100T),
+# used for area reports (see fpga/README.md). Parameters as in
+# ibex/examples/simple_system/ibex_simple_system.core, so util/ibex_config.py
+# configurations apply, plus MemSizeKiB.
+name: "ibex-pqc:fpga:simple_system_nexys4ddr"
+description: "Ibex Simple System on the Nexys 4 DDR (synthesis / area)"
+filesets:
+  files_rtl:
+    depend:
+      - lowrisc:ibex:ibex_top
+      # bus, timer, ram_2p
+      - lowrisc:ibex:sim_shared
+      # clkgen_xil7series
+      - lowrisc:ibex:fpga_xilinx_shared
+    files:
+      - rtl/ibex_simple_system_fpga.sv
+      - rtl/top_nexys4ddr_simple.sv
+    file_type: systemVerilogSource
+
+  files_constraints:
+    files:
+      - data/pins_nexys4ddr_simple.xdc
+    file_type: xdc
+
+parameters:
+  BaseIsa:
+    datatype: str
+    default: ibex_pkg::BaseIsaRV32I
+    paramtype: vlogdefine
+  RV32E:
+    datatype: int
+    paramtype: vlogparam
+    default: 0
+  RV32M:
+    datatype: str
+    default: ibex_pkg::RV32MFast
+    paramtype: vlogdefine
+  RV32B:
+    datatype: str
+    default: ibex_pkg::RV32BNone
+    paramtype: vlogdefine
+  RV32ZC:
+    datatype: str
+    default: ibex_pkg::RV32ZcaZcbZcmp
+    paramtype: vlogdefine
+  RegFile:
+    datatype: str
+    default: ibex_pkg::RegFileFF
+    paramtype: vlogdefine
+  ICache:
+    datatype: int
+    default: 0
+    paramtype: vlogparam
+  ICacheECC:
+    datatype: int
+    default: 0
+    paramtype: vlogparam
+  SRAMInitFile:
+    datatype: str
+    paramtype: vlogparam
+  BranchTargetALU:
+    datatype: int
+    paramtype: vlogparam
+    default: 0
+  WritebackStage:
+    datatype: int
+    paramtype: vlogparam
+    default: 0
+  SecureIbex:
+    datatype: int
+    default: 0
+    paramtype: vlogparam
+  ICacheScramble:
+    datatype: int
+    default: 0
+    paramtype: vlogparam
+  BranchPredictor:
+    datatype: int
+    paramtype: vlogparam
+    default: 0
+  DbgTriggerEn:
+    datatype: int
+    default: 0
+    paramtype: vlogparam
+  PMPEnable:
+    datatype: int
+    default: 0
+    paramtype: vlogparam
+  PMPGranularity:
+    datatype: int
+    default: 0
+    paramtype: vlogparam
+  PMPNumRegions:
+    datatype: int
+    default: 4
+    paramtype: vlogparam
+  MHPMCounterNum:
+    datatype: int
+    paramtype: vlogparam
+    default: 0
+  MHPMCounterWidth:
+    datatype: int
+    paramtype: vlogparam
+    default: 40
+  MemSizeKiB:
+    datatype: int
+    paramtype: vlogparam
+    default: 128
+    description: "RAM size in KiB, a power of two"
+
+targets:
+  default: &default_target
+    filesets:
+      - files_rtl
+    toplevel: top_nexys4ddr_simple
+
+  synth:
+    <<: *default_target
+    default_tool: vivado
+    filesets_append:
+      - files_constraints
+    tools:
+      vivado:
+        part: "xc7a100tcsg324-1"  # Nexys 4 DDR / Nexys A7-100T
+    parameters:
+      - BaseIsa
+      - RV32E
+      - RV32M
+      - RV32B
+      - RV32ZC
+      - RegFile
+      - ICache
+      - ICacheScramble
+      - ICacheECC
+      - BranchTargetALU
+      - WritebackStage
+      - SecureIbex
+      - BranchPredictor
+      - DbgTriggerEn
+      - PMPEnable
+      - PMPGranularity
+      - PMPNumRegions
+      - MHPMCounterNum
+      - MHPMCounterWidth
+      - SRAMInitFile
+      - MemSizeKiB

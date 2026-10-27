@@ -1,0 +1,3 @@
+// Idle program for area builds: one instruction, "j ." (jump to itself).
+// The RAM contents do not change the resources used.
+@00000000 0000006f

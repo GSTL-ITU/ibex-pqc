@@ -7,6 +7,7 @@ systems built around it, including cycle counts of post-quantum crypto
 ```
 .
 ├── tests/              test suite + Makefile (see tests/README.md)
+├── fpga/               FPGA area reports for the Nexys 4 DDR, core vs SoC (see fpga/README.md)
 ├── ibex/               submodule: lowRISC/ibex (core + Simple System)
 ├── ibex-demo-system/   submodule: lowRISC/ibex-demo-system (Demo System)
 ├── kyber/              submodule: pq-crystals/kyber (Kyber reference code, used by tests/kyber_*)
