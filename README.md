@@ -28,8 +28,8 @@ The `ibex` submodule is what the Simple System uses.
 
 ```sh
 cd tests
-make test name=hello                 # on the Simple System
-make test name=hello SYSTEM=demo     # on the Demo System
+make test NAME=hello                 # on the Simple System
+make test NAME=hello SYSTEM=demo     # on the Demo System
 make regress                         # everything
 ```
 

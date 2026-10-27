@@ -2,8 +2,8 @@
 #   SYSTEM=simple   ../ibex/examples/simple_system   (default)
 #   SYSTEM=demo     ../ibex-demo-system
 #
-#   make test name=hello              build sim (if needed), compile, run, PASS/FAIL
-#   make test name=hello SYSTEM=demo  same on the demo system
+#   make test NAME=hello              build sim (if needed), compile, run, PASS/FAIL
+#   make test NAME=hello SYSTEM=demo  same on the demo system
 #   make help                         list all targets and variables
 #
 # Each folder under tests/ (except lib/ and build/) is one test. All sources
@@ -31,9 +31,14 @@ SYSTEMS    ?= $(ALL_SYSTEMS)
 # Set to the toolchain install dir (containing bin/) if it is not on PATH
 TOOLCHAIN_DIR ?=
 
-# Per-test overrides (command line still wins)
+# The variable used to be lowercase
 ifneq ($(name),)
--include $(TESTS_DIR)/$(name)/test.mk
+$(error Use NAME=$(name) instead of name=$(name))
+endif
+
+# Per-test overrides (command line still wins)
+ifneq ($(NAME),)
+-include $(TESTS_DIR)/$(NAME)/test.mk
 endif
 
 # ---------------------------------------------------------------- systems ---
@@ -106,11 +111,11 @@ LIBS := -lgcc -Wl,--no-warn-rwx-segments
 # ------------------------------------------------------------------ tests ---
 TESTS := $(sort $(filter-out lib build,$(notdir $(patsubst %/,%,$(wildcard $(TESTS_DIR)/*/)))))
 
-TEST_DIR := $(TESTS_DIR)/$(name)
-OUT      := $(BUILD_DIR)/$(SYSTEM)/$(name)
-REL_OUT  := build/$(SYSTEM)/$(name)
+TEST_DIR := $(TESTS_DIR)/$(NAME)
+OUT      := $(BUILD_DIR)/$(SYSTEM)/$(NAME)
+REL_OUT  := build/$(SYSTEM)/$(NAME)
 OBJ_DIR  := $(OUT)/obj
-ELF      := $(OUT)/$(name).elf
+ELF      := $(OUT)/$(NAME).elf
 
 SRCS := $(wildcard $(TEST_DIR)/*.c $(TEST_DIR)/*.S $(LIB_DIR)/*.c $(LIB_DIR)/*.S) $(SYS_SRCS)
 OBJS := $(addprefix $(OBJ_DIR)/,$(addsuffix .o,$(notdir $(basename $(SRCS)))))
@@ -124,16 +129,16 @@ vpath %.S $(TEST_DIR) $(LIB_DIR) $(SYS_SW)
 
 help:
 	@echo "Usage:"
-	@echo "  make test name=X       build sim if needed, compile X, run, report PASS/FAIL"
-	@echo "  make build name=X      compile only -> build/SYSTEM/X/X.elf"
-	@echo "  make run name=X        run an already compiled test"
-	@echo "  make wave name=X       run with waveform dump -> build/SYSTEM/X/sim.fst"
-	@echo "  make dis name=X        disassembly -> build/SYSTEM/X/X.dis"
-	@echo "  make new name=X        create tests/X from a template"
+	@echo "  make test NAME=X       build sim if needed, compile X, run, report PASS/FAIL"
+	@echo "  make build NAME=X      compile only -> build/SYSTEM/X/X.elf"
+	@echo "  make run NAME=X        run an already compiled test"
+	@echo "  make wave NAME=X       run with waveform dump -> build/SYSTEM/X/sim.fst"
+	@echo "  make dis NAME=X        disassembly -> build/SYSTEM/X/X.dis"
+	@echo "  make new NAME=X        create tests/X from a template"
 	@echo "  make sim               build the Verilator simulator for SYSTEM (and CONFIG)"
 	@echo "  make list              list tests and the systems they run on"
 	@echo "  make regress           run all tests on all systems (or only SYSTEM=...)"
-	@echo "  make clean [name=X]    remove build/*/X (or all test outputs)"
+	@echo "  make clean [NAME=X]    remove build/*/X (or all test outputs)"
 	@echo "  make clean-sim         remove the simulator for SYSTEM (and CONFIG)"
 	@echo ""
 	@echo "Variables: SYSTEM=$(SYSTEM) ($(ALL_SYSTEMS)) CONFIG=$(CONFIG) (simple only)"
@@ -141,15 +146,15 @@ help:
 	@echo "           CC=$(CC) TOOLCHAIN_DIR=$(TOOLCHAIN_DIR) CFLAGS_EXTRA=$(CFLAGS_EXTRA)"
 
 check-name:
-ifeq ($(name),)
-	$(error name is not set, e.g. make $(MAKECMDGOALS) name=hello)
+ifeq ($(NAME),)
+	$(error NAME is not set, e.g. make $(MAKECMDGOALS) NAME=hello)
 endif
-ifneq ($(filter lib build,$(name)),)
-	$(error "$(name)" is not a test: tests/lib holds shared helpers, tests/build is output. Run make list)
+ifneq ($(filter lib build,$(NAME)),)
+	$(error "$(NAME)" is not a test: tests/lib holds shared helpers, tests/build is output. Run make list)
 endif
-	@test -d $(TEST_DIR) || { echo "Error: no such test: $(name) (tests/$(name) not found)"; exit 1; }
+	@test -d $(TEST_DIR) || { echo "Error: no such test: $(NAME) (tests/$(NAME) not found)"; exit 1; }
 ifeq ($(filter $(SYSTEM),$(SYSTEMS)),)
-	$(error Test $(name) does not support SYSTEM=$(SYSTEM), only: $(SYSTEMS) (see tests/$(name)/test.mk))
+	$(error Test $(NAME) does not support SYSTEM=$(SYSTEM), only: $(SYSTEMS) (see tests/$(NAME)/test.mk))
 endif
 
 check-tools:
@@ -158,7 +163,7 @@ check-tools:
 # Prints "<test> <systems>", systems read from each test.mk
 list:
 	@for t in $(TESTS); do \
-	  s=$$($(MAKE) --no-print-directory -s name=$$t print-systems); \
+	  s=$$($(MAKE) --no-print-directory -s NAME=$$t print-systems); \
 	  printf '%-20s %s\n' $$t "$$s"; \
 	done
 
@@ -189,15 +194,15 @@ clean-sim:
 	rm -rf $(SYS_SIM_DIR)
 
 # ----------------------------------------------------------------- build ----
-build: check-name check-tools $(ELF) $(OUT)/$(name).dis
+build: check-name check-tools $(ELF) $(OUT)/$(NAME).dis
 
 $(ELF): $(OBJS) $(SYS_LD)
 	$(CC) $(CFLAGS) -T $(SYS_LD) $(OBJS) -o $@ $(LIBS)
 	@$(SIZE) $@
 
-dis: check-name check-tools $(OUT)/$(name).dis
+dis: check-name check-tools $(OUT)/$(NAME).dis
 
-$(OUT)/$(name).dis: $(ELF)
+$(OUT)/$(NAME).dis: $(ELF)
 	$(OBJDUMP) -fhSD $< > $@
 
 $(OBJ_DIR)/%.o: %.c | $(OBJ_DIR)
@@ -223,11 +228,11 @@ FORCE:
 #   otherwise              -> "TEST PASSED" present and "TEST FAILED" absent
 # On the demo system, UART output goes to uart0.log and is shown as well.
 # The result line is also written to build/SYSTEM/X/result.txt for regress.
-SIM_ARGS = --meminit=ram,$(name).elf --term-after-cycles=$(MAX_CYCLES)
+SIM_ARGS = --meminit=ram,$(NAME).elf --term-after-cycles=$(MAX_CYCLES)
 
 define run_sim
 	@cd $(OUT) && rm -f $(SYS_LOG) uart0.log result.txt expect.diff && \
-	echo "=== Running $(name) on $(SYSTEM) ($(SYS_DESC), MAX_CYCLES=$(MAX_CYCLES))" && \
+	echo "=== Running $(NAME) on $(SYSTEM) ($(SYS_DESC), MAX_CYCLES=$(MAX_CYCLES))" && \
 	$(SYS_SIM_BIN) $(SIM_ARGS) $(1) > sim_stdout.log 2>&1 < /dev/null; \
 	rc=$$?; \
 	touch $(SYS_LOG); \
@@ -242,20 +247,20 @@ define run_sim
 	elif grep -q "TEST FAILED" $(SYS_LOG); then verdict=FAIL; \
 	elif grep -q "TEST PASSED" $(SYS_LOG); then verdict=PASS; \
 	else verdict="FAIL (no TEST PASSED/TEST FAILED in output)"; fi; \
-	echo "$(name) $(SYSTEM) $$verdict $${cycles:-?} cycles" > result.txt; \
-	echo "=== $(name) [$(SYSTEM)]: $$verdict ($${cycles:-?} cycles)"; \
+	echo "$(NAME) $(SYSTEM) $$verdict $${cycles:-?} cycles" > result.txt; \
+	echo "=== $(NAME) [$(SYSTEM)]: $$verdict ($${cycles:-?} cycles)"; \
 	case "$$verdict" in PASS) exit 0;; *) exit 1;; esac
 endef
 
-test: check-name check-tools $(SYS_SIM_BIN) $(ELF) $(OUT)/$(name).dis
+test: check-name check-tools $(SYS_SIM_BIN) $(ELF) $(OUT)/$(NAME).dis
 	$(call run_sim,)
 
 run: check-name
-	@test -f $(ELF) || { echo "Error: $(ELF) not built, run make build name=$(name) SYSTEM=$(SYSTEM)"; exit 1; }
+	@test -f $(ELF) || { echo "Error: $(ELF) not built, run make build NAME=$(NAME) SYSTEM=$(SYSTEM)"; exit 1; }
 	@test -x $(SYS_SIM_BIN) || { echo "Error: simulator not built, run make sim SYSTEM=$(SYSTEM)"; exit 1; }
 	$(call run_sim,)
 
-wave: check-name check-tools $(SYS_SIM_BIN) $(ELF) $(OUT)/$(name).dis
+wave: check-name check-tools $(SYS_SIM_BIN) $(ELF) $(OUT)/$(NAME).dis
 	$(call run_sim,-t)
 
 # --------------------------------------------------------------- regress ----
@@ -272,14 +277,14 @@ regress:
 	@pass=0; total=0; skip=0; summary=$(BUILD_DIR)/regress.txt; : > $$summary; \
 	for s in $(REGRESS_SYSTEMS); do \
 	  for t in $(TESTS); do \
-	    case " $$($(MAKE) --no-print-directory -s name=$$t print-systems) " in \
+	    case " $$($(MAKE) --no-print-directory -s NAME=$$t print-systems) " in \
 	      *" $$s "*) ;; \
 	      *) skip=$$((skip+1)); continue;; \
 	    esac; \
 	    total=$$((total+1)); \
 	    log=$(BUILD_DIR)/$$s/regress_$$t.log; mkdir -p $(BUILD_DIR)/$$s; \
 	    rm -f $(BUILD_DIR)/$$s/$$t/result.txt; \
-	    if $(MAKE) --no-print-directory test name=$$t SYSTEM=$$s > $$log 2>&1; then pass=$$((pass+1)); fi; \
+	    if $(MAKE) --no-print-directory test NAME=$$t SYSTEM=$$s > $$log 2>&1; then pass=$$((pass+1)); fi; \
 	    if [ -f $(BUILD_DIR)/$$s/$$t/result.txt ]; then cat $(BUILD_DIR)/$$s/$$t/result.txt >> $$summary; \
 	    else echo "$$t $$s FAIL (build error, see build/$$s/regress_$$t.log)" >> $$summary; fi; \
 	  done; \
@@ -291,28 +296,28 @@ regress:
 
 # ------------------------------------------------------------------- new ----
 new:
-ifeq ($(name),)
-	$(error name is not set, e.g. make new name=my_test)
+ifeq ($(NAME),)
+	$(error NAME is not set, e.g. make new NAME=my_test)
 endif
-	@test ! -e $(TEST_DIR) || { echo "Error: tests/$(name) already exists"; exit 1; }
+	@test ! -e $(TEST_DIR) || { echo "Error: tests/$(NAME) already exists"; exit 1; }
 	@mkdir -p $(TEST_DIR)
 	@printf '%s\n' \
 	  '#include "test_utils.h"  // also includes the system header' \
 	  '' \
 	  'int main(void) {' \
-	  '  puts("$(name)\n");' \
+	  '  puts("$(NAME)\n");' \
 	  '' \
 	  '  CHECK(1 + 1 == 2);' \
 	  '' \
 	  '  test_pass();' \
 	  '  return 0;' \
-	  '}' > $(TEST_DIR)/$(name).c
-	@echo "Created tests/$(name)/$(name).c, run: make test name=$(name) [SYSTEM=demo]"
+	  '}' > $(TEST_DIR)/$(NAME).c
+	@echo "Created tests/$(NAME)/$(NAME).c, run: make test NAME=$(NAME) [SYSTEM=demo]"
 
 # ----------------------------------------------------------------- clean ----
 clean:
-ifneq ($(name),)
-	rm -rf $(addsuffix /$(name),$(addprefix $(BUILD_DIR)/,$(ALL_SYSTEMS)))
+ifneq ($(NAME),)
+	rm -rf $(addsuffix /$(NAME),$(addprefix $(BUILD_DIR)/,$(ALL_SYSTEMS)))
 else
 	rm -rf $(addprefix $(BUILD_DIR)/,$(ALL_SYSTEMS)) $(BUILD_DIR)/regress.txt
 endif

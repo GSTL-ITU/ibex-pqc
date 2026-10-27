@@ -17,10 +17,10 @@ system's pinned tools (lowRISC's FuseSoC fork). Your own FuseSoC is not changed.
 
 ```sh
 cd tests
-make test name=hello                 # simple system; first run builds the simulator (minutes)
-make test name=hello SYSTEM=demo     # same test on the demo system
-make new name=my_test                # creates tests/my_test/my_test.c from a template
-make test name=my_test
+make test NAME=hello                 # simple system; first run builds the simulator (minutes)
+make test NAME=hello SYSTEM=demo     # same test on the demo system
+make new NAME=my_test                # creates tests/my_test/my_test.c from a template
+make test NAME=my_test
 make regress                         # every test on every system it supports
 make regress SYSTEM=demo             # only on one system
 ```
@@ -29,23 +29,23 @@ make regress SYSTEM=demo             # only on one system
 
 | Target | What it does |
 |---|---|
-| `make test name=X` | build sim if needed, compile X, run, PASS/FAIL (exit code 0/1) |
-| `make build name=X` | compile only → `build/<SYSTEM>/X/X.elf`, `X.dis` |
-| `make run name=X` | run an already compiled test |
-| `make wave name=X` | run with waveform dump → `build/<SYSTEM>/X/sim.fst` (GTKWave) |
-| `make dis name=X` | disassembly → `build/<SYSTEM>/X/X.dis` |
-| `make new name=X` | create a test from a template |
+| `make test NAME=X` | build sim if needed, compile X, run, PASS/FAIL (exit code 0/1) |
+| `make build NAME=X` | compile only → `build/<SYSTEM>/X/X.elf`, `X.dis` |
+| `make run NAME=X` | run an already compiled test |
+| `make wave NAME=X` | run with waveform dump → `build/<SYSTEM>/X/sim.fst` (GTKWave) |
+| `make dis NAME=X` | disassembly → `build/<SYSTEM>/X/X.dis` |
+| `make new NAME=X` | create a test from a template |
 | `make sim` | build only the simulator for `SYSTEM` (and `CONFIG`) |
 | `make list` | list tests and the systems they run on |
 | `make regress` | run all tests → `build/regress.txt` |
-| `make clean [name=X]` | remove test outputs (keeps simulators) |
+| `make clean [NAME=X]` | remove test outputs (keeps simulators) |
 | `make clean-sim` | remove the simulator for `SYSTEM` (do this after RTL changes) |
 
 All targets take `SYSTEM=simple|demo`.
 
 ## Variables
 
-Set them on the command line (`make test name=X OPT=-O2`), or for one test in
+Set them on the command line (`make test NAME=X OPT=-O2`), or for one test in
 `tests/X/test.mk`:
 
 | Variable | Default | Meaning |
