@@ -1,0 +1,99 @@
+NOTE: written before the move to the workspace layout. The Ibex repo is
+now the ibex/ submodule, so run these commands from ibex/, not the top level.
+For the automated flow, see tests/README.md.
+
+How to compile and run a C program on Ibex (Verilator, Simple System)
+=====================================================================
+
+All commands are run from the Ibex repository root (/home/baris/gstl/ibex).
+Source of truth: examples/simple_system/README.md
+
+
+0. Prerequisites
+----------------
+- Verilator (installed: /usr/local/bin/verilator, 5.053)
+- FuseSoC + Python deps:   pip3 install -U -r python-requirements.txt
+                           (fusesoc is NOT on PATH right now)
+- RISC-V GCC toolchain providing "riscv32-unknown-elf-gcc"
+  (lowRISC prebuilt: https://github.com/lowRISC/lowrisc-toolchains/releases)
+  (NOT on PATH right now). If your toolchain has a different prefix
+  (e.g. riscv64-unknown-elf-gcc), override CC:  make CC=riscv64-unknown-elf-gcc ...
+- libelf-dev (Fedora: elfutils-libelf-devel)
+- srecord (only needed for the .vmem output; Fedora: srecord)
+
+
+1. Build the simulator (one time, or whenever RTL/config changes)
+-----------------------------------------------------------------
+    fusesoc --cores-root=. run --target=sim --setup --build \
+        lowrisc:ibex:ibex_simple_system $(util/ibex_config.py small fusesoc_opts)
+
+"small" is a config name from ibex_configs.yaml (e.g. small, opentitan, maxperf).
+Use "opentitan" or larger if you want the extra performance counters.
+
+Result:
+    build/lowrisc_ibex_ibex_simple_system_0/sim-verilator/Vibex_simple_system
+
+
+2. Compile the C program
+------------------------
+Example (hello world):
+    make -C examples/sw/simple_system/hello_test
+
+Produces in that directory: hello_test.elf, hello_test.bin, hello_test.vmem
+
+For your own program:
+  a) copy examples/sw/simple_system/hello_test to e.g.
+     examples/sw/simple_system/my_test
+  b) rename hello_test.c -> my_test.c
+  c) in its Makefile set:  PROGRAM = my_test
+     (EXTRA_SRCS can list extra .c / .S files)
+  d) make -C examples/sw/simple_system/my_test
+
+What the build does (examples/sw/simple_system/common/common.mk):
+  - compiler flags: -march=rv32imc -mabi=ilp32 -static -mcmodel=medany -Os -g
+                    -nostdlib -nostartfiles -ffreestanding
+    (override ARCH, e.g. ARCH=rv32im to disable compressed instructions)
+  - links with common/crt0.S (startup) and common/link.ld (linker script)
+  - adds common/simple_system_common.c (putchar/puts/puthex/sim_halt/timer)
+
+Program rules (bare-metal, no libc):
+  - #include "simple_system_common.h"
+  - write a normal int main(void)
+  - output text with puts(), putchar(), puthex()  (no printf)
+  - returning from main halts the simulation (crt0 writes 1 to 0x20008),
+    or call sim_halt() anywhere
+
+Memory map:
+  0x20000              ASCII out (one char per write -> log file)
+  0x20008              Write 1 to halt the simulator
+  0x30000..0x3000C     mtime / mtimeh / mtimecmp / mtimecmph
+  0x100000..0x1FFFFF   1 MB RAM, boot at 0x100080, trap vector base 0x100000
+
+
+3. Run the simulation
+---------------------
+    ./build/lowrisc_ibex_ibex_simple_system_0/sim-verilator/Vibex_simple_system \
+        --meminit=ram,examples/sw/simple_system/hello_test/hello_test.elf
+
+Useful options:
+  -t / --trace               dump waveform (FST, view with GTKWave)
+  -c N / --term-after-cycles=N   stop after N cycles (safety timeout)
+  -h / --help                list all options
+
+Output files (written into the CURRENT directory):
+  ibex_simple_system.log          text the program printed (puts/putchar)
+  ibex_simple_system_pcount.csv   performance counters
+  trace_core_00000000.log         instruction-by-instruction trace
+  sim.fst                         waveform (only with -t)
+
+At the end, the simulator prints cycle count and performance counters on stdout.
+
+
+4. Quick summary
+----------------
+    fusesoc --cores-root=. run --target=sim --setup --build \
+        lowrisc:ibex:ibex_simple_system $(util/ibex_config.py small fusesoc_opts)
+    make -C examples/sw/simple_system/hello_test
+    ./build/lowrisc_ibex_ibex_simple_system_0/sim-verilator/Vibex_simple_system \
+        --meminit=ram,examples/sw/simple_system/hello_test/hello_test.elf
+    cat ibex_simple_system.log
