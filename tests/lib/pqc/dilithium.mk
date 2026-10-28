@@ -18,7 +18,7 @@ endif
 
 EXTRA_SRCS  += $(filter-out $(DILITHIUM_REF)/randombytes.c,$(wildcard $(DILITHIUM_REF)/*.c)) \
 	$(TESTS_DIR)/lib/pqc/randombytes.c
-EXTRA_INCS  += $(DILITHIUM_REF)
+EXTRA_INCS  += $(DILITHIUM_REF) $(TESTS_DIR)/lib/pqc
 TEST_CFLAGS += -DTEST_REPORT_STACK -DDILITHIUM_MODE=$(DILITHIUM_MODE)
 
 # The reference code keeps the public matrix and other polynomial vectors on

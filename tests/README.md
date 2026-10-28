@@ -168,7 +168,7 @@ submodule ([pq-crystals/kyber](https://github.com/pq-crystals/kyber), folder `re
 | Test | Purpose |
 |---|---|
 | `kyber_ref` | Upstream functional test (`test_kyber.c`): shared keys match, and a wrong secret key or modified ciphertext gives a different key |
-| `kyber_cycles` | Cycle counts of `crypto_kem_keypair`, `crypto_kem_enc` and `crypto_kem_dec`, measured separately, plus peak stack usage. Fails if the keys differ or the stack overflowed. |
+| `kyber_cycles` | Cycle counts of `crypto_kem_keypair`, `crypto_kem_enc` and `crypto_kem_dec`, measured separately, plus peak stack usage. `N_TEST` runs with different seeds, with median, min and max. Fails if the keys differ or the stack overflowed. |
 
 The Kyber sources are compiled straight from the submodule
 (`lib/pqc/kyber.mk`, included by both `test.mk`). Only two files differ, see
@@ -183,16 +183,18 @@ make test NAME=kyber_cycles KYBER_K=2        # Kyber512
 make test NAME=kyber_cycles KYBER_K=4 SYSTEM=demo
 make test NAME=kyber_ref                     # functional test, ~35 s
 make test NAME=kyber_ref NTESTS=10           # more iterations (upstream: 1000)
+make test NAME=kyber_cycles N_TEST=10        # 10 runs, different seeds, ~2 min
 ```
 
 | Variable | Default | Tests | Meaning |
 |---|---|---|---|
 | `KYBER_K` | `3` | both | `2` = Kyber512, `3` = Kyber768, `4` = Kyber1024 |
 | `NTESTS` | `1` | `kyber_ref` | iterations of the three checks |
+| `N_TEST` | `1` | `kyber_cycles` | runs, each with its own seed (see [Several seeds](#several-seeds-n_test)) |
 
 Both build with `-O2` (like the pulpissimo-pqc results), `STACK_SIZE=0x8000`
-and `TRACE=0`, and run on both systems. Builds go to `build/<SYSTEM>/kyber_cycles-k<K>/` and
-`kyber_ref-k<K>-n<NTESTS>/`.
+and `TRACE=0`, and run on both systems. Builds go to `build/<SYSTEM>/kyber_cycles-k<K>/`
+(`kyber_cycles-k<K>-n<N_TEST>/` for `N_TEST` > 1) and `kyber_ref-k<K>-n<NTESTS>/`.
 
 ### Results (`-O2`, `CONFIG=small`)
 
@@ -236,7 +238,7 @@ folder `ref/`), set up the same way as Kyber:
 | Test | Purpose |
 |---|---|
 | `dilithium_ref` | Upstream functional test (`test_dilithium.c`): sign and verify a message, check lengths and message, and check that a modified signed message fails verification |
-| `dilithium_cycles` | Cycle counts of `crypto_sign_keypair`, `crypto_sign` and `crypto_sign_open`, measured separately, plus peak stack usage. Fails if verification fails or the stack overflowed. |
+| `dilithium_cycles` | Cycle counts of `crypto_sign_keypair`, `crypto_sign` and `crypto_sign_open`, measured separately, plus peak stack usage. `N_TEST` runs with different seeds, with median, min and max. Fails if verification fails or the stack overflowed. |
 
 The sources are compiled from the submodule (`lib/pqc/dilithium.mk`).
 `randombytes()` is the same fixed-seed generator as for Kyber (not secure;
@@ -254,9 +256,11 @@ make test NAME=dilithium_ref                         # functional test, ~1 min
 |---|---|---|---|
 | `DILITHIUM_MODE` | `2` | both | `2` = Dilithium2, `3` = Dilithium3, `5` = Dilithium5 |
 | `NTESTS` | `1` | `dilithium_ref` | iterations (upstream: 10000) |
+| `N_TEST` | `1` | `dilithium_cycles` | runs, each with its own seed (see [Several seeds](#several-seeds-n_test)) |
 
 Both build with `-O2` and `TRACE=0`. Builds go to
-`build/<SYSTEM>/dilithium_cycles-mode<M>/` and `dilithium_ref-mode<M>-n<NTESTS>/`.
+`build/<SYSTEM>/dilithium_cycles-mode<M>/` (`-mode<M>-n<N_TEST>/` for `N_TEST` > 1)
+and `dilithium_ref-mode<M>-n<NTESTS>/`.
 
 **Stack and the demo system.** The reference code keeps the public matrix and
 other polynomial vectors on the stack:
@@ -298,6 +302,67 @@ is one sample for the fixed seed. A different seed or message can change it
 by a large factor; key generation and verification vary only slightly. This
 is why signing barely grows from Dilithium2 to Dilithium5. Don't compare
 signing cost between modes from these numbers.
+
+## Several seeds (`N_TEST`)
+
+`kyber_cycles` and `dilithium_cycles` take `N_TEST` (default 1): the three
+operations run `N_TEST` times in one simulation, each run after restarting
+`randombytes()` from its own seed (`lib/pqc/bench.h`). Run 0 uses the default
+seed, the others seeds derived from it, so each run has its own keys (and for
+Dilithium its own message and signing randomness). The program prints every
+run with its seed, run 0 in the single-run format, and median, min and max
+per operation. Every run must be correct for the test to pass.
+
+```sh
+make test NAME=dilithium_cycles DILITHIUM_MODE=3 N_TEST=10 SYSTEM=demo
+python3 lib/pqc/cycles_table.py 10     # table of all N_TEST=10 results in build/
+```
+
+### Results (`N_TEST=10`, `-O2`, `CONFIG=small`)
+
+All 11 configurations on both systems ran in parallel in ~22 min (8 cores);
+the longest was Dilithium5 (624M simulated cycles, ~20 min).
+
+| Parameter set | Operation | simple: 1 seed | simple: median | simple: min – max | demo: 1 seed | demo: median | demo: min – max |
+|---|---|---:|---:|---:|---:|---:|---:|
+| Kyber512 | `crypto_kem_keypair` | 1,269,890 | 1,269,988 | 1,269,581 – 1,270,295 | 1,269,890 | 1,269,988 | 1,269,581 – 1,270,295 |
+|  | `crypto_kem_enc` | 1,428,835 | 1,428,933 | 1,428,526 – 1,429,240 | 1,428,835 | 1,428,933 | 1,428,526 – 1,429,240 |
+|  | `crypto_kem_dec` | 1,702,239 | 1,702,337 | 1,701,930 – 1,702,644 | 1,702,239 | 1,702,337 | 1,701,930 – 1,702,644 |
+| Kyber768 | `crypto_kem_keypair` | 2,087,297 | 2,087,584 | 2,086,564 – 2,119,612 | 2,087,297 | 2,087,584 | 2,086,564 – 2,119,612 |
+|  | `crypto_kem_enc` | 2,351,724 | 2,352,011 | 2,350,991 – 2,384,039 | 2,351,724 | 2,352,011 | 2,350,991 – 2,384,039 |
+|  | `crypto_kem_dec` | 2,710,364 | 2,710,651 | 2,709,631 – 2,742,679 | 2,710,364 | 2,710,651 | 2,709,631 – 2,742,679 |
+| Kyber1024 | `crypto_kem_keypair` | 3,288,612 | 3,288,963 | 3,287,511 – 3,289,599 | 3,288,612 | 3,288,963 | 3,287,511 – 3,289,599 |
+|  | `crypto_kem_enc` | 3,610,885 | 3,611,236 | 3,609,784 – 3,611,872 | 3,610,885 | 3,611,236 | 3,609,784 – 3,611,872 |
+|  | `crypto_kem_dec` | 4,067,601 | 4,067,952 | 4,066,500 – 4,068,588 | 4,067,601 | 4,067,952 | 4,066,500 – 4,068,588 |
+| Dilithium2 | `crypto_sign_keypair` | 4,391,984 | 4,407,991 | 4,360,612 – 4,487,103 | 4,391,984 | 4,407,991 | 4,360,612 – 4,487,103 |
+|  | `crypto_sign` | 27,509,216 | 11,663,116 | 6,801,373 – 27,509,216 | 27,509,216 | 11,663,116 | 6,801,373 – 27,509,216 |
+|  | `crypto_sign_open` | 4,689,102 | 4,689,396 | 4,688,980 – 4,689,907 | 4,689,102 | 4,689,396 | 4,688,980 – 4,689,907 |
+| Dilithium3 | `crypto_sign_keypair` | 7,744,168 | 7,744,378 | 7,742,606 – 7,744,908 | 7,744,168 | 7,744,378 | 7,742,606 – 7,744,908 |
+|  | `crypto_sign` | 28,893,558 | 22,175,194 | 10,598,640 – 67,882,451 | 28,893,558 | 22,175,194 | 10,598,640 – 67,882,451 |
+|  | `crypto_sign_open` | 7,813,053 | 7,813,238 | 7,812,936 – 7,813,442 | 7,813,053 | 7,813,238 | 7,812,936 – 7,813,442 |
+| Dilithium5 | `crypto_sign_keypair` | 13,102,569 | 13,055,222 | 12,976,555 – 13,260,243 | – | – | – |
+|  | `crypto_sign` | 31,143,581 | 32,923,147 | 17,130,468 – 73,189,859 | – | – | – |
+|  | `crypto_sign_open` | 13,315,579 | 13,315,510 | 13,315,294 – 13,315,927 | – | – | – |
+
+1 seed: run 0, the default seed (`RANDOMBYTES_SEED`). Median of an even number of runs: mean of the two middle values.
+
+- **Identical on both systems** again, run for run.
+- **1 seed vs the tables above:** run 0 uses the same seed, but the
+  `N_TEST=10` loop moves the code, so it differs by up to 1% (layout drift,
+  see Kyber). With `N_TEST=1` the compiler removes the loop and the numbers
+  above are reproduced. Within this table, all columns come from the same
+  binary.
+- **Kyber** barely depends on the seed (range under 0.1%). The only
+  seed-dependent part is rejection sampling while generating the matrix A.
+  The exception is Kyber768's maximum: one seed needed more sampling (+32K
+  cycles, +1.5%).
+- **Dilithium key generation and verification** vary by less than 3% and 0.02%.
+- **Dilithium signing varies by up to 6.4x** (Dilithium3: 10.6M – 67.9M). The default seed is the slowest
+  of the ten runs for Dilithium2, so the single-seed signing numbers
+  overstate the typical cost: the Dilithium2 median is 11.7M, not 27.5M. For
+  signing, use the median and range, and more runs for a stable median.
+- Peak stack with `N_TEST=10`: 16–32 B more than with `N_TEST=1` (the loop's
+  variables).
 
 ## Outputs (`build/<SYSTEM>/X/` or `X-<VARIANT>/`)
 

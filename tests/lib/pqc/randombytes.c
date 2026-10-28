@@ -5,6 +5,9 @@
  * counts reproducible.
  *
  * NOT cryptographically secure. For testing only.
+ *
+ * ibex-pqc addition: randombytes_seed() restarts the generator from another
+ * seed (used by the *_cycles tests for N_TEST runs). Otherwise unchanged.
  */
 #include <stddef.h>
 #include <stdint.h>
@@ -15,6 +18,11 @@
 #endif
 
 static uint32_t state = RANDOMBYTES_SEED;
+
+void randombytes_seed(uint32_t seed)
+{
+  state = seed ? seed : RANDOMBYTES_SEED;  /* xorshift32 is stuck at 0 */
+}
 
 static uint32_t xorshift32(void)
 {

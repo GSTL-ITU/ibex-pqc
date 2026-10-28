@@ -15,7 +15,7 @@ endif
 
 EXTRA_SRCS  += $(filter-out $(KYBER_REF)/randombytes.c,$(wildcard $(KYBER_REF)/*.c)) \
 	$(TESTS_DIR)/lib/pqc/randombytes.c
-EXTRA_INCS  += $(KYBER_REF)
+EXTRA_INCS  += $(KYBER_REF) $(TESTS_DIR)/lib/pqc
 TEST_CFLAGS += -DTEST_REPORT_STACK -DKYBER_K=$(KYBER_K)
 
 # Keys, ciphertexts and polynomial vectors live on the stack
